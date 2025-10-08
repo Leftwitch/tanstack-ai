@@ -1,0 +1,49 @@
+{
+  "name": "@tanstack/ai-cli-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CLI demo for TanStack AI library",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "tanstack-ai": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "dev:watch": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist node_modules",
+    "chat": "tsx src/index.ts chat",
+    "generate": "tsx src/index.ts generate",
+    "summarize": "tsx src/index.ts summarize",
+    "embed": "tsx src/index.ts embed"
+  },
+  "keywords": [
+    "ai",
+    "cli",
+    "demo",
+    "tanstack"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@tanstack/ai": "workspace:*",
+    "@tanstack/ai-openai": "workspace:*",
+    "@tanstack/ai-anthropic": "workspace:*",
+    "@tanstack/ai-ollama": "workspace:*",
+    "@tanstack/ai-gemini": "workspace:*",
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0",
+    "inquirer": "^9.2.19",
+    "ora": "^8.0.1",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/inquirer": "^9.0.7",
+    "tsup": "^8.0.2",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.2"
+  }
+}

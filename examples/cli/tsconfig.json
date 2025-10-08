@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"],
+    "composite": false
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist", "**/*.config.ts"],
+  "references": [
+    { "path": "../../packages/ai" },
+    { "path": "../../packages/ai-openai" },
+    { "path": "../../packages/ai-anthropic" },
+    { "path": "../../packages/ai-ollama" },
+    { "path": "../../packages/ai-gemini" }
+  ]
+}
