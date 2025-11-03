@@ -375,6 +375,9 @@ importers:
 
   packages/typescript/ai-react-ui:
     dependencies:
+      '@tanstack/ai-client':
+        specifier: workspace:*
+        version: link:../ai-client
       '@tanstack/ai-react':
         specifier: workspace:*
         version: link:../ai-react
