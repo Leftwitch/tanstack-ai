@@ -1,0 +1,56 @@
+{
+  "name": "@tanstack/ai-react",
+  "version": "0.1.0",
+  "description": "React hooks for TanStack AI",
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TanStack/ai.git",
+    "directory": "packages/typescript/ai-react"
+  },
+  "type": "module",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "clean": "rm -rf dist node_modules",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai",
+    "react",
+    "hooks",
+    "tanstack",
+    "chat",
+    "streaming"
+  ],
+  "dependencies": {
+    "@tanstack/ai": "workspace:*",
+    "@tanstack/ai-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.2.66",
+    "react": "^18.2.0",
+    "tsdown": "^0.15.9",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "@tanstack/ai": "workspace:*",
+    "@tanstack/ai-client": "workspace:*",
+    "react": ">=18.0.0"
+  }
+}

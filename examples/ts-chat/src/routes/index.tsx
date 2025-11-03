@@ -1,121 +1,556 @@
-import { createFileRoute } from '@tanstack/react-router'
-
+import { useEffect, useRef, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { Send } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
+import rehypeHighlight from "rehype-highlight";
+import remarkGfm from "remark-gfm";
 import {
-  Zap,
-  Server,
-  Route as RouteIcon,
-  Shield,
-  Waves,
-  Sparkles,
-} from 'lucide-react'
+  useChat,
+  fetchServerSentEvents,
+  type UIMessage,
+} from "@tanstack/ai-react";
+import { uiMessageToModelMessages } from "@tanstack/ai-client";
 
-export const Route = createFileRoute('/')({
-  component: App,
-})
+import GuitarRecommendation from "@/components/example-GuitarRecommendation";
 
-function App() {
-  const features = [
-    {
-      icon: <Zap className="w-12 h-12 text-cyan-400" />,
-      title: 'Powerful Server Functions',
-      description:
-        'Write server-side code that seamlessly integrates with your client components. Type-safe, secure, and simple.',
-    },
-    {
-      icon: <Server className="w-12 h-12 text-cyan-400" />,
-      title: 'Flexible Server Side Rendering',
-      description:
-        'Full-document SSR, streaming, and progressive enhancement out of the box. Control exactly what renders where.',
-    },
-    {
-      icon: <RouteIcon className="w-12 h-12 text-cyan-400" />,
-      title: 'API Routes',
-      description:
-        'Build type-safe API endpoints alongside your application. No separate backend needed.',
-    },
-    {
-      icon: <Shield className="w-12 h-12 text-cyan-400" />,
-      title: 'Strongly Typed Everything',
-      description:
-        'End-to-end type safety from server to client. Catch errors before they reach production.',
-    },
-    {
-      icon: <Waves className="w-12 h-12 text-cyan-400" />,
-      title: 'Full Streaming Support',
-      description:
-        'Stream data from server to client progressively. Perfect for AI applications and real-time updates.',
-    },
-    {
-      icon: <Sparkles className="w-12 h-12 text-cyan-400" />,
-      title: 'Next Generation Ready',
-      description:
-        'Built from the ground up for modern web applications. Deploy anywhere JavaScript runs.',
-    },
-  ]
+function ChatInputArea({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border-t border-orange-500/10 bg-gray-900/80 backdrop-blur-sm">
+      <div className="w-full px-4 py-3">{children}</div>
+    </div>
+  );
+}
+
+function Messages({
+  messages,
+  addToolApprovalResponse,
+}: {
+  messages: Array<UIMessage>;
+  addToolApprovalResponse: (response: {
+    id: string;
+    approved: boolean;
+  }) => Promise<void>;
+}) {
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop =
+        messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  if (!messages.length) {
+    return null;
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
-      <section className="relative py-20 px-6 text-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-purple-500/10"></div>
-        <div className="relative max-w-5xl mx-auto">
-          <div className="flex items-center justify-center gap-6 mb-6">
-            <img
-              src="/tanstack-circle-logo.png"
-              alt="TanStack Logo"
-              className="w-24 h-24 md:w-32 md:h-32"
-            />
-            <h1 className="text-6xl md:text-7xl font-bold text-white">
-              <span className="text-gray-300">TANSTACK</span>{' '}
-              <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                START
-              </span>
-            </h1>
-          </div>
-          <p className="text-2xl md:text-3xl text-gray-300 mb-4 font-light">
-            The framework for next generation AI applications
-          </p>
-          <p className="text-lg text-gray-400 max-w-3xl mx-auto mb-8">
-            Full-stack framework powered by TanStack Router for React and Solid.
-            Build modern applications with server functions, streaming, and type
-            safety.
-          </p>
-          <div className="flex flex-col items-center gap-4">
-            <a
-              href="https://tanstack.com/start"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-8 py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold rounded-lg transition-colors shadow-lg shadow-cyan-500/50"
-            >
-              Documentation
-            </a>
-            <p className="text-gray-400 text-sm mt-2">
-              Begin your TanStack Start journey by editing{' '}
-              <code className="px-2 py-1 bg-slate-700 rounded text-cyan-400">
-                /src/routes/index.tsx
-              </code>
-            </p>
-          </div>
-        </div>
-      </section>
+    <div
+      ref={messagesContainerRef}
+      className="flex-1 overflow-y-auto px-4 py-4"
+    >
+      {messages.map(({ id, role, parts }) => {
+        return (
+          <div
+            key={id}
+            className={`p-4 rounded-lg mb-2 ${
+              role === "assistant"
+                ? "bg-linear-to-r from-orange-500/5 to-red-600/5"
+                : "bg-transparent"
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              {role === "assistant" ? (
+                <div className="w-8 h-8 rounded-lg bg-linear-to-r from-orange-500 to-red-600 flex items-center justify-center text-sm font-medium text-white flex-shrink-0">
+                  AI
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-gray-700 flex items-center justify-center text-sm font-medium text-white flex-shrink-0">
+                  U
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                {/* Render parts in order */}
+                {parts.map((part, index) => {
+                  if (part.type === "text" && part.content) {
+                    return (
+                      <div
+                        key={`text-${index}`}
+                        className="text-white prose dark:prose-invert max-w-none"
+                      >
+                        <ReactMarkdown
+                          rehypePlugins={[
+                            rehypeRaw,
+                            rehypeSanitize,
+                            rehypeHighlight,
+                            remarkGfm,
+                          ]}
+                        >
+                          {part.content}
+                        </ReactMarkdown>
+                      </div>
+                    );
+                  }
 
-      <section className="py-16 px-6 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature, index) => (
-            <div
-              key={index}
-              className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10"
-            >
-              <div className="mb-4">{feature.icon}</div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                {feature.title}
-              </h3>
-              <p className="text-gray-400 leading-relaxed">
-                {feature.description}
-              </p>
+                  // Approval UI
+                  if (
+                    part.type === "tool-call" &&
+                    part.state === "approval-requested" &&
+                    part.approval
+                  ) {
+                    return (
+                      <div
+                        key={part.id}
+                        className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mt-2"
+                      >
+                        <p className="text-white font-medium mb-2">
+                          🔒 Approval Required: {part.name}
+                        </p>
+                        <div className="text-gray-300 text-sm mb-3">
+                          <pre className="bg-gray-800 p-2 rounded text-xs overflow-x-auto">
+                            {JSON.stringify(
+                              JSON.parse(part.arguments),
+                              null,
+                              2
+                            )}
+                          </pre>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() =>
+                              addToolApprovalResponse({
+                                id: part.approval!.id,
+                                approved: true,
+                              })
+                            }
+                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                          >
+                            ✓ Approve
+                          </button>
+                          <button
+                            onClick={() =>
+                              addToolApprovalResponse({
+                                id: part.approval!.id,
+                                approved: false,
+                              })
+                            }
+                            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                          >
+                            ✗ Deny
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Guitar recommendation card
+                  if (
+                    part.type === "tool-call" &&
+                    part.name === "recommendGuitar" &&
+                    part.output
+                  ) {
+                    try {
+                      return (
+                        <div key={part.id} className="mt-2">
+                          <GuitarRecommendation id={part.output.id} />
+                        </div>
+                      );
+                    } catch {
+                      return null;
+                    }
+                  }
+
+                  return null;
+                })}
+              </div>
             </div>
-          ))}
-        </div>
-      </section>
+          </div>
+        );
+      })}
     </div>
-  )
+  );
 }
+
+function DebugPanel({
+  messages,
+  chunks,
+  onClearChunks,
+}: {
+  messages: Array<UIMessage>;
+  chunks: any[];
+  onClearChunks: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<"messages" | "chunks">("messages");
+
+  const exportToTypeScript = () => {
+    const tsCode = `const rawChunks = ${JSON.stringify(chunks, null, 2)};`;
+    navigator.clipboard.writeText(tsCode);
+    alert("TypeScript code copied to clipboard!");
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-4 border-b border-orange-500/20">
+        <h2 className="text-white font-semibold text-lg">Debug Panel</h2>
+        <p className="text-gray-400 text-sm mt-1">
+          View messages and raw stream chunks
+        </p>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => setActiveTab("messages")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === "messages"
+                ? "bg-orange-500 text-white"
+                : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+          >
+            Messages
+          </button>
+          <button
+            onClick={() => setActiveTab("chunks")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === "chunks"
+                ? "bg-orange-500 text-white"
+                : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+          >
+            Raw Chunks ({chunks.length})
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        {activeTab === "messages" && (
+          <div>
+            <pre className="text-xs text-gray-300 font-mono bg-gray-800 p-4 rounded-lg overflow-x-auto">
+              {JSON.stringify(messages, null, 2)}
+            </pre>
+          </div>
+        )}
+
+        {activeTab === "chunks" && (
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <button
+                onClick={exportToTypeScript}
+                disabled={chunks.length === 0}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                📋 Export to TypeScript
+              </button>
+              <button
+                onClick={onClearChunks}
+                disabled={chunks.length === 0}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                🗑️ Clear Chunks
+              </button>
+            </div>
+
+            {/* Chunks Table */}
+            <div className="bg-gray-800 rounded-lg overflow-hidden">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-gray-900 text-gray-400 uppercase">
+                  <tr>
+                    <th className="px-4 py-3 w-32">Type</th>
+                    <th className="px-4 py-3 w-24">Role</th>
+                    <th className="px-4 py-3 w-24">Tool Type</th>
+                    <th className="px-4 py-3 w-32">Tool Name</th>
+                    <th className="px-4 py-3">Detail</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-300">
+                  {chunks.map((chunk, idx) => {
+                    const role = chunk.role || "-";
+                    const toolType = chunk.toolCall?.type || "-";
+                    const toolName = chunk.toolCall?.function?.name || "-";
+
+                    let detail = "-";
+                    if (chunk.type === "content" && chunk.content) {
+                      detail = chunk.content;
+                    } else if (
+                      chunk.type === "tool_call" &&
+                      chunk.toolCall?.function?.arguments
+                    ) {
+                      detail = chunk.toolCall.function.arguments;
+                    } else if (chunk.type === "tool_result" && chunk.content) {
+                      detail = chunk.content;
+                    } else if (chunk.type === "done") {
+                      detail = `Finish: ${chunk.finishReason || "unknown"}`;
+                    }
+
+                    // Truncate at 200 chars
+                    if (detail.length > 200) {
+                      detail = detail.substring(0, 200) + "...";
+                    }
+
+                    return (
+                      <tr
+                        key={idx}
+                        className="border-b border-gray-700 hover:bg-gray-750"
+                      >
+                        <td className="px-4 py-3 font-medium">{chunk.type}</td>
+                        <td className="px-4 py-3">{role}</td>
+                        <td className="px-4 py-3">{toolType}</td>
+                        <td className="px-4 py-3">{toolName}</td>
+                        <td className="px-4 py-3 font-mono text-xs break-all">
+                          {detail}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChatPage() {
+  const [chunks, setChunks] = useState<any[]>([]);
+  const [endpoint, setEndpoint] = useState<"/api/tanchat" | "/api/test-chat">(
+    "/api/test-chat"
+  );
+
+  const {
+    messages,
+    sendMessage,
+    isLoading,
+    addToolResult,
+    addToolApprovalResponse,
+  } = useChat({
+    connection: {
+      async *connect(msgs, data) {
+        // For test endpoint, send UIMessages directly (preserve parts for approval extraction)
+        // For real endpoint, convert to ModelMessages
+        const body =
+          endpoint === "/api/test-chat"
+            ? { messages: msgs } // Send UIMessages with parts
+            : {
+                messages: msgs.flatMap((m) =>
+                  "parts" in m ? uiMessageToModelMessages(m) : [m]
+                ),
+              };
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok || !response.body) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              if (data === "[DONE]") continue;
+              try {
+                yield JSON.parse(data);
+              } catch (e) {
+                console.error("Failed to parse SSE data:", e);
+              }
+            }
+          }
+        }
+      },
+      abort: () => {},
+    },
+    onChunk: (chunk: any) => {
+      setChunks((prev) => [...prev, chunk]);
+    },
+    onToolCall: async ({ toolCallId, toolName, input }) => {
+      // Handle client-side tool execution
+      switch (toolName) {
+        case "getPersonalGuitarPreference":
+          // Pure client tool - executes immediately
+          return { preference: "acoustic" };
+
+        case "recommendGuitar":
+          // Client tool for UI display
+          return { id: input.id };
+
+        case "addToWishList":
+          // Hybrid: client execution AFTER approval
+          // Only runs after user approves
+          const wishList = JSON.parse(localStorage.getItem("wishList") || "[]");
+          wishList.push(input.guitarId);
+          localStorage.setItem("wishList", JSON.stringify(wishList));
+          return {
+            success: true,
+            guitarId: input.guitarId,
+            totalItems: wishList.length,
+          };
+
+        default:
+          throw new Error(`Unknown client tool: ${toolName}`);
+      }
+    },
+  });
+  const [input, setInput] = useState("");
+
+  const clearChunks = () => setChunks([]);
+
+  return (
+    <div className="flex h-screen bg-gray-900">
+      {/* Left side - Chat (1/4 width) */}
+      <div className="w-1/4 flex flex-col border-r border-orange-500/20">
+        <div className="p-4 border-b border-orange-500/20">
+          <h1 className="text-2xl font-bold bg-linear-to-r from-orange-500 to-red-600 text-transparent bg-clip-text">
+            TanStack Chat
+          </h1>
+          <p className="text-gray-400 text-sm mt-1">
+            Parts-based UIMessages with tool states
+          </p>
+
+          {/* Endpoint Selector */}
+          <div className="mt-3">
+            <label className="text-gray-400 text-xs font-medium mb-1 block">
+              Endpoint:
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEndpoint("/api/test-chat")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  endpoint === "/api/test-chat"
+                    ? "bg-orange-500 text-white"
+                    : "bg-gray-800 text-gray-400 hover:text-white"
+                }`}
+              >
+                🧪 Test (Stub LLM)
+              </button>
+              <button
+                onClick={() => setEndpoint("/api/tanchat")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  endpoint === "/api/tanchat"
+                    ? "bg-orange-500 text-white"
+                    : "bg-gray-800 text-gray-400 hover:text-white"
+                }`}
+              >
+                🤖 Real (GPT-4o)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <Messages
+          messages={messages}
+          addToolApprovalResponse={addToolApprovalResponse}
+        />
+
+        <ChatInputArea>
+          <div className="space-y-3">
+            <div className="relative">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Type something clever (or don't, we won't judge)..."
+                className="w-full rounded-lg border border-orange-500/20 bg-gray-800/50 pl-4 pr-12 py-3 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-transparent resize-none overflow-hidden shadow-lg"
+                rows={1}
+                style={{ minHeight: "44px", maxHeight: "200px" }}
+                disabled={isLoading}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement;
+                  target.style.height = "auto";
+                  target.style.height =
+                    Math.min(target.scrollHeight, 200) + "px";
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && input.trim()) {
+                    e.preventDefault();
+                    sendMessage(input);
+                    setInput("");
+                  }
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (input.trim()) {
+                    sendMessage(input);
+                    setInput("");
+                  }
+                }}
+                disabled={!input.trim() || isLoading}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-orange-500 hover:text-orange-400 disabled:text-gray-500 transition-colors focus:outline-none"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick test buttons - only show for stub LLM */}
+            {endpoint === "/api/test-chat" && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs text-gray-500 font-medium">
+                  Quick Tests:
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => sendMessage("what's my preference?")}
+                    disabled={isLoading}
+                    className="px-2 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 disabled:opacity-50 transition-colors text-left"
+                  >
+                    🎸 Get Preference
+                  </button>
+                  <button
+                    onClick={() => sendMessage("recommend an acoustic guitar")}
+                    disabled={isLoading}
+                    className="px-2 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 disabled:opacity-50 transition-colors text-left"
+                  >
+                    💡 Recommend
+                  </button>
+                  <button
+                    onClick={() => sendMessage("add to wish list")}
+                    disabled={isLoading}
+                    className="px-2 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 disabled:opacity-50 transition-colors text-left"
+                  >
+                    ❤️ Wish List
+                  </button>
+                  <button
+                    onClick={() => sendMessage("add to cart")}
+                    disabled={isLoading}
+                    className="px-2 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 disabled:opacity-50 transition-colors text-left"
+                  >
+                    🛒 Add to Cart
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </ChatInputArea>
+      </div>
+
+      {/* Right side - Debug Panel (3/4 width) */}
+      <div className="w-3/4 bg-gray-950 flex flex-col">
+        <DebugPanel
+          messages={messages}
+          chunks={chunks}
+          onClearChunks={clearChunks}
+        />
+      </div>
+    </div>
+  );
+}
+
+export const Route = createFileRoute("/")({
+  component: ChatPage,
+});

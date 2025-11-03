@@ -1,5 +1,16 @@
 # Tool Registry API
 
+> **🔄 Automatic Tool Execution Loop:** The `chat()` method automatically executes tools in a loop. When the model decides to call a tool, the SDK:
+> 1. Executes the tool's `execute` function
+> 2. Emits `tool_result` chunks with the result
+> 3. Adds tool results to messages automatically
+> 4. Continues the conversation with the model
+> 5. Repeats until no more tools are needed (up to `maxIterations`, default: 5)
+>
+> **You don't need to manually handle tool execution** - just provide tools with `execute` functions and the SDK handles everything!
+>
+> **📚 See also:** [Complete Tool Execution Loop Documentation](TOOL_EXECUTION_LOOP.md)
+
 ## Overview
 
 The Tool Registry API allows you to define tools once in the AI constructor and then reference them by name throughout your application. This provides better organization, type safety, and reusability.
@@ -264,7 +275,6 @@ const stream = ai.chat({
   tools: ["get_weather", "calculate"],
   toolChoice: "auto",
   maxIterations: 5,
-  as: "stream" as const,
 });
 
 for await (const chunk of stream) {
@@ -283,19 +293,22 @@ for await (const chunk of stream) {
 Perfect for API endpoints:
 
 ```typescript
+import { toStreamResponse } from "@tanstack/ai";
+
 export const Route = createAPIFileRoute("/api/chat")({
   POST: async ({ request }): Promise<Response> => {
     const { messages } = await request.json();
     
-    return ai.chat({
+    const stream = ai.chat({
       adapter: "openai",
       model: "gpt-4o",
       messages,
       tools: ["get_weather", "search_database", "send_email"],
       toolChoice: "auto",
       maxIterations: 5,
-      as: "response" as const,
     });
+
+    return toStreamResponse(stream);
   }
 });
 ```

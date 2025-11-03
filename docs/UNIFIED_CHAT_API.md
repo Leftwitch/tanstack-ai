@@ -2,116 +2,130 @@
 
 ## Overview
 
-The `chat()` method has been unified to support three different return types through the `as` configuration option:
+The chat API provides two methods for different use cases:
 
-- **`"promise"`** (default): Returns `Promise<ChatCompletionResult>` - standard non-streaming chat
-- **`"stream"`**: Returns `AsyncIterable<StreamChunk>` - streaming chunks for manual handling
-- **`"response"`**: Returns `Response` - HTTP response with proper streaming headers (SSE format)
+- **`chat()`** - Returns `AsyncIterable<StreamChunk>` - streaming with **automatic tool execution loop**
+- **`chatCompletion()`** - Returns `Promise<ChatCompletionResult>` - standard non-streaming chat with optional structured output
 
-This eliminates the need for separate `chat()` and `streamChat()` methods.
+### 🔄 Automatic Tool Execution in `chat()`
+
+**IMPORTANT:** The `chat()` method runs an automatic tool execution loop. When you provide tools with `execute` functions:
+
+1. **Model calls a tool** → SDK executes it automatically
+2. **SDK emits chunks** for tool calls and results (`tool_call`, `tool_result`)
+3. **SDK adds results** to messages and continues conversation
+4. **Loop repeats** until stopped by `agentLoopStrategy` (default: `maxIterations(5)`)
+
+**You don't need to manually execute tools or manage conversation state** - the SDK handles everything internally!
+
+**📚 See also:** [Complete Tool Execution Loop Documentation](TOOL_EXECUTION_LOOP.md)
 
 ## Migration Guide
 
-### Before (Separate Methods)
+### Before (Using `as` option)
 
 ```typescript
 // For non-streaming
 const result = await ai.chat({
   adapter: "openai",
   model: "gpt-4",
-  messages: [{ role: "user", content: "Hello" }]
+  messages: [{ role: "user", content: "Hello" }],
+  as: "promise",
 });
 
 // For streaming
-const stream = ai.streamChat({
-  adapter: "openai", 
+const stream = ai.chat({
+  adapter: "openai",
   model: "gpt-4",
-  messages: [{ role: "user", content: "Hello" }]
+  messages: [{ role: "user", content: "Hello" }],
+  as: "stream",
 });
 for await (const chunk of stream) {
   console.log(chunk);
 }
 
 // For HTTP response
-import { toStreamResponse } from "@ts-poc/ai";
-const stream = ai.streamChat({
-  adapter: "openai",
-  model: "gpt-4", 
-  messages: [{ role: "user", content: "Hello" }]
-});
-return toStreamResponse(stream);
-```
-
-### After (Unified Method)
-
-```typescript
-// For non-streaming (default, "as" is optional)
-const result = await ai.chat({
+const response = ai.chat({
   adapter: "openai",
   model: "gpt-4",
   messages: [{ role: "user", content: "Hello" }],
-  as: "promise" // or omit this line - "promise" is the default
+  as: "response",
+});
+return response;
+```
+
+### After (Separate Methods)
+
+```typescript
+// For non-streaming - use chatCompletion()
+const result = await ai.chatCompletion({
+  adapter: "openai",
+  model: "gpt-4",
+  messages: [{ role: "user", content: "Hello" }],
 });
 
-// For streaming
+// For streaming - use chat()
 const stream = ai.chat({
   adapter: "openai",
   model: "gpt-4",
   messages: [{ role: "user", content: "Hello" }],
-  as: "stream"
 });
 for await (const chunk of stream) {
   console.log(chunk);
 }
 
-// For HTTP response (no need to import toStreamResponse!)
-return ai.chat({
+// For HTTP response - use chat() + toStreamResponse()
+import { toStreamResponse } from "@tanstack/ai";
+
+const stream = ai.chat({
   adapter: "openai",
   model: "gpt-4",
   messages: [{ role: "user", content: "Hello" }],
-  as: "response"
 });
+return toStreamResponse(stream);
 ```
 
 ## Usage Examples
 
-### 1. Promise Mode (Default)
+### 1. Promise Mode (chatCompletion)
 
 Standard non-streaming chat completion:
 
 ```typescript
-const result = await ai.chat({
+const result = await ai.chatCompletion({
   adapter: "openai",
   model: "gpt-4",
   messages: [
     { role: "system", content: "You are a helpful assistant." },
-    { role: "user", content: "What is TypeScript?" }
+    { role: "user", content: "What is TypeScript?" },
   ],
   temperature: 0.7,
-  // as: "promise" is implicit
 });
 
 console.log(result.content);
 console.log(`Tokens used: ${result.usage.totalTokens}`);
 ```
 
-### 2. Stream Mode
+### 2. Stream Mode (chat)
 
-Manual streaming for custom handling:
+Streaming with automatic tool execution loop:
 
 ```typescript
 const stream = ai.chat({
   adapter: "openai",
   model: "gpt-4",
   messages: [{ role: "user", content: "Write a story" }],
-  as: "stream"
+  tools: [weatherTool], // Optional: tools are auto-executed
+  agentLoopStrategy: maxIterations(5), // Optional: control loop
 });
 
 for await (const chunk of stream) {
   if (chunk.type === "content") {
-    process.stdout.write(chunk.delta);
+    process.stdout.write(chunk.delta); // Stream text response
   } else if (chunk.type === "tool_call") {
-    console.log(`Tool: ${chunk.toolCall.function.name}`);
+    console.log(`→ Calling tool: ${chunk.toolCall.function.name}`);
+  } else if (chunk.type === "tool_result") {
+    console.log(`✓ Tool result: ${chunk.content}`);
   } else if (chunk.type === "done") {
     console.log(`\nFinished: ${chunk.finishReason}`);
     console.log(`Tokens: ${chunk.usage?.totalTokens}`);
@@ -119,44 +133,51 @@ for await (const chunk of stream) {
 }
 ```
 
-### 3. Response Mode (HTTP Streaming)
+**Chunk Types:**
+
+- `content` - Text content from the model (use `chunk.delta` for streaming)
+- `tool_call` - Model is calling a tool (emitted by model, auto-executed by SDK)
+- `tool_result` - Tool execution result (emitted after SDK executes tool)
+- `done` - Stream complete (includes `finishReason` and token usage)
+- `error` - An error occurred
+
+### 3. HTTP Response Mode
 
 Perfect for API endpoints:
 
 ```typescript
+import { toStreamResponse } from "@tanstack/ai";
+
 // TanStack Start API Route
 export const POST = async ({ request }: { request: Request }) => {
   const { messages } = await request.json();
 
-  // Returns a Response object with proper SSE headers
-  return ai.chat({
+  const stream = ai.chat({
     adapter: "openai",
     model: "gpt-4o",
     messages,
     temperature: 0.7,
-    as: "response", // ← Returns Response directly!
-    fallbacks: [
-      { adapter: "ollama", model: "llama2" }
-    ]
   });
+
+  // Convert stream to Response with SSE headers
+  return toStreamResponse(stream);
 };
 ```
 
 ## With Fallbacks
 
-All three modes support fallbacks:
+Both methods support fallbacks:
 
 ```typescript
 // Promise mode with fallbacks
-const result = await ai.chat({
+const result = await ai.chatCompletion({
   adapter: "openai",
   model: "gpt-4",
   messages: [{ role: "user", content: "Hello" }],
-  as: "promise",
   fallbacks: [
     { adapter: "anthropic", model: "claude-3-sonnet-20240229" },
-    { adapter: "ollama", model: "llama2" }
-  ]
+    { adapter: "ollama", model: "llama2" },
+  ],
 });
 
 // Stream mode with fallbacks
@@ -164,27 +185,22 @@ const stream = ai.chat({
   adapter: "openai",
   model: "gpt-4",
   messages: [{ role: "user", content: "Hello" }],
-  as: "stream",
-  fallbacks: [
-    { adapter: "anthropic", model: "claude-3-sonnet-20240229" }
-  ]
+  fallbacks: [{ adapter: "anthropic", model: "claude-3-sonnet-20240229" }],
 });
 
-// Response mode with fallbacks (seamless failover in HTTP streaming!)
-return ai.chat({
+// HTTP response with fallbacks (seamless failover in HTTP streaming!)
+const stream = ai.chat({
   adapter: "openai",
   model: "gpt-4",
   messages: [{ role: "user", content: "Hello" }],
-  as: "response",
-  fallbacks: [
-    { adapter: "ollama", model: "llama2" }
-  ]
+  fallbacks: [{ adapter: "ollama", model: "llama2" }],
 });
+return toStreamResponse(stream);
 ```
 
-## Tool Execution
+## Tool Execution with Automatic Loop
 
-Tool execution works in all three modes:
+**The `chat()` method automatically executes tools in a loop** - no manual management needed!
 
 ```typescript
 const tools = [
@@ -196,92 +212,124 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          location: { type: "string" }
-        }
-      }
+          location: { type: "string" },
+        },
+        required: ["location"],
+      },
     },
     execute: async (args: { location: string }) => {
-      return JSON.stringify({ temp: 72, condition: "sunny" });
-    }
-  }
+      // This function is automatically called by the SDK
+      const weather = await fetchWeatherAPI(args.location);
+      return JSON.stringify(weather);
+    },
+  },
 ];
 
-// Promise mode - waits for all tool executions to complete
-const result = await ai.chat({
-  adapter: "openai",
-  model: "gpt-4",
-  messages: [{ role: "user", content: "What's the weather in SF?" }],
-  tools,
-  toolChoice: "auto",
-  maxIterations: 5,
-  as: "promise"
-});
-
-// Stream mode - see tool execution happen in real-time
+// Streaming chat with automatic tool execution
 const stream = ai.chat({
   adapter: "openai",
   model: "gpt-4",
   messages: [{ role: "user", content: "What's the weather in SF?" }],
-  tools,
+  tools, // Tools with execute functions are auto-executed
   toolChoice: "auto",
-  maxIterations: 5,
-  as: "stream"
+  agentLoopStrategy: maxIterations(5), // Control loop behavior
 });
 
 for await (const chunk of stream) {
-  if (chunk.type === "tool_call") {
-    console.log(`Calling tool: ${chunk.toolCall.function.name}`);
+  if (chunk.type === "content") {
+    process.stdout.write(chunk.delta); // Stream text response
+  } else if (chunk.type === "tool_call") {
+    // Model decided to call a tool - SDK will execute it automatically
+    console.log(`→ Calling: ${chunk.toolCall.function.name}`);
+  } else if (chunk.type === "tool_result") {
+    // SDK executed the tool and got a result
+    console.log(`✓ Result: ${chunk.content}`);
+  } else if (chunk.type === "done") {
+    console.log(`Finished: ${chunk.finishReason}`);
   }
 }
+```
 
-// Response mode - stream tool execution to client
-return ai.chat({
+**🔄 What Happens Internally:**
+
+1. User asks: "What's the weather in SF?"
+2. Model decides to call `get_weather` tool
+   - SDK emits `tool_call` chunk
+3. **SDK automatically executes** `tools[0].execute({ location: "SF" })`
+   - SDK emits `tool_result` chunk
+4. SDK adds assistant message (with tool call) + tool result to messages
+5. **SDK automatically continues** conversation by calling model again
+6. Model responds: "The weather in SF is sunny, 72°F"
+   - SDK emits `content` chunks
+7. SDK emits `done` chunk
+
+**Key Points:**
+
+- ✅ Tools are **automatically executed** by the SDK (you don't call `execute`)
+- ✅ Tool results are **automatically added** to messages
+- ✅ Conversation **automatically continues** after tool execution
+- ✅ Loop controlled by `agentLoopStrategy` (default: `maxIterations(5)`)
+- ✅ All you do is handle chunks for display
+- ✅ Custom strategies available for advanced control
+
+**Promise Mode (No Tool Execution):**
+
+The `chatCompletion()` method does NOT execute tools - it returns the model's response immediately:
+
+```typescript
+// chatCompletion does not execute tools
+const result = await ai.chatCompletion({
   adapter: "openai",
   model: "gpt-4",
   messages: [{ role: "user", content: "What's the weather in SF?" }],
   tools,
-  toolChoice: "auto",
-  maxIterations: 5,
-  as: "response"
 });
+
+// If model wanted to call a tool, result.toolCalls will contain the calls
+// but they won't be executed. This is useful if you want manual control.
+if (result.toolCalls) {
+  console.log("Model wants to call:", result.toolCalls);
+  // You would execute manually and call chatCompletion again
+}
 ```
 
 ## Type Safety
 
-TypeScript automatically infers the correct return type based on the `as` option:
+TypeScript automatically infers the correct return type:
 
 ```typescript
 // Type: Promise<ChatCompletionResult>
-const promise = ai.chat({ adapter: "openai", model: "gpt-4", messages: [] });
+const promise = ai.chatCompletion({
+  adapter: "openai",
+  model: "gpt-4",
+  messages: [],
+});
 
 // Type: AsyncIterable<StreamChunk>
-const stream = ai.chat({ adapter: "openai", model: "gpt-4", messages: [], as: "stream" });
-
-// Type: Response
-const response = ai.chat({ adapter: "openai", model: "gpt-4", messages: [], as: "response" });
+const stream = ai.chat({ adapter: "openai", model: "gpt-4", messages: [] });
 ```
 
 ## Benefits
 
-1. **Simpler API**: One method instead of two
-2. **Consistent Interface**: Same options across all modes
-3. **HTTP Streaming Made Easy**: No need to manually call `toStreamResponse()`
-4. **Fallbacks Everywhere**: All modes support the same fallback mechanism
+1. **Clearer API**: Separate methods for different use cases
+2. **Consistent Interface**: Same options across both methods
+3. **HTTP Streaming Made Easy**: Use `toStreamResponse()` helper
+4. **Fallbacks Everywhere**: Both methods support the same fallback mechanism
 5. **Type Safety**: TypeScript infers the correct return type
-6. **Backward Compatible**: Default behavior (promise) matches old `chat()` method
+6. **Structured Outputs**: Available in `chatCompletion()` method
 
 ## Real-World Example: TanStack Start API
 
 ```typescript
 import { createAPIFileRoute } from "@tanstack/start/api";
 import { ai } from "~/lib/ai-client";
+import { toStreamResponse } from "@tanstack/ai";
 
 export const Route = createAPIFileRoute("/api/chat")({
   POST: async ({ request }) => {
     const { messages, tools } = await request.json();
 
-    // That's it! Just return the result - it's already a Response
-    return ai.chat({
+    const stream = ai.chat({
       adapter: "openAi",
       model: "gpt-4o",
       messages,
@@ -289,12 +337,11 @@ export const Route = createAPIFileRoute("/api/chat")({
       toolChoice: "auto",
       maxIterations: 5,
       temperature: 0.7,
-      as: "response", // ← Returns Response with SSE headers
-      fallbacks: [
-        { adapter: "ollama", model: "llama2" }
-      ]
+      fallbacks: [{ adapter: "ollama", model: "llama2" }],
     });
-  }
+
+    return toStreamResponse(stream);
+  },
 });
 ```
 
@@ -303,7 +350,7 @@ Client-side consumption:
 ```typescript
 const response = await fetch("/api/chat", {
   method: "POST",
-  body: JSON.stringify({ messages, tools })
+  body: JSON.stringify({ messages, tools }),
 });
 
 const reader = response.body!.getReader();
@@ -315,12 +362,12 @@ while (true) {
 
   const text = decoder.decode(value);
   const lines = text.split("\n\n");
-  
+
   for (const line of lines) {
     if (line.startsWith("data: ")) {
       const data = line.slice(6);
       if (data === "[DONE]") continue;
-      
+
       const chunk = JSON.parse(data);
       if (chunk.type === "content") {
         console.log(chunk.delta); // Stream content to UI
@@ -332,11 +379,11 @@ while (true) {
 
 ## Summary
 
-The unified `chat()` API provides:
-- **One method** for all chat use cases
-- **Three modes**: promise, stream, response
-- **Same options** across all modes
-- **Built-in HTTP streaming** (no manual conversion needed)
-- **Full fallback support** in all modes
+The unified chat API provides:
+
+- **Two methods**: `chat()` for streaming, `chatCompletion()` for promises
+- **Same options** across both methods
+- **Built-in HTTP streaming** helper (`toStreamResponse`)
+- **Full fallback support** in both methods
 - **Type-safe** return types
 - **Simpler code** for common patterns

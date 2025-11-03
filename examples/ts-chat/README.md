@@ -36,18 +36,20 @@ An example chat application built with TanStack Start, TanStack Store, and **Tan
 ## .env Updates
 
 ```env
-ANTHROPIC_API_KEY=your_anthropic_api_key
+OPENAI_API_KEY=your_openai_api_key
 ```
 
 ## ✨ Features
 
 ### AI Capabilities
 
-- 🤖 Powered by **TanStack AI** with Claude 3.5 Sonnet
+- 🤖 Powered by **TanStack AI** with OpenAI GPT-4o
 - 📝 Rich markdown formatting with syntax highlighting
 - 🎯 Customizable system prompts for tailored AI behavior
-- 🔄 Real-time streaming responses with structured JSON chunks
-- 🛠️ Tool/function calling with guitar recommendations
+- 🔄 Real-time streaming responses with Server-Sent Events
+- 🔌 **Connection adapters** - flexible streaming architecture
+- 🛠️ **Automatic tool execution loop** - tools are executed automatically by the SDK
+- 🎸 Tool/function calling with guitar recommendations
 
 ### User Experience
 
@@ -70,7 +72,10 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 - **Routing**: TanStack Router
 - **State Management**: TanStack Store
 - **Styling**: Tailwind CSS
-- **AI Integration**: Anthropic's Claude API
+- **AI Integration**: TanStack AI with OpenAI GPT-4o
+- **Chat Client**: `@tanstack/ai-react` with connection adapters
+- **Streaming**: Server-Sent Events via `fetchServerSentEvents`
+- **Tool Execution**: Automatic loop with `ToolCallManager`
 
 ## Routing
 
